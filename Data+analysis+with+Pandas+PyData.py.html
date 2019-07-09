@@ -1,0 +1,811 @@
+
+# coding: utf-8
+
+# In[40]:
+
+import pandas as pd
+import numpy as np
+import seaborn as sns
+import matplotlib.pyplot as plt
+import statsmodels.formula.api as smf
+import statsmodels.stats.multicomp as multi
+import statsmodels.api as sm
+import scipy.stats
+from sklearn.cross_validation import train_test_split
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.metrics import classification_report
+import sklearn.metrics
+from sklearn.ensemble import ExtraTreesClassifier
+from sklearn.ensemble import RandomForestClassifier
+from sklearn import datasets
+get_ipython().magic(u'matplotlib inline')
+sns.set(style="whitegrid", color_codes=True)
+
+
+# In[41]:
+
+cleveland = pd.read_csv('http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.cleveland.data', sep = ',', header=None)
+cleveland.head()
+
+
+# In[42]:
+
+hungary = pd.read_csv('http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.hungarian.data', sep = ',', header=None)
+hungary.head()
+
+
+# In[43]:
+
+switzerland = pd.read_csv('http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.switzerland.data', sep = ',', header=None)
+switzerland.head()
+
+
+# In[44]:
+
+va = pd.read_csv('http://archive.ics.uci.edu/ml/machine-learning-databases/heart-disease/processed.va.data', sep = ',', header=None)
+va.head()
+
+
+# In[45]:
+
+df = pd.concat([cleveland, hungary, switzerland, va])
+df
+
+
+# In[46]:
+
+# Rename the columns
+df.columns = ['age', 'sex', 'chest_pain', 'rest_bp', 'cholesterol', 'fasting_bs', 'rest_ecg', 'max_heart_rate',
+             'exercise_angina', 'st_depression', 'slope', 'flouroscopy', 'defect', 'diagnosis']
+
+
+# In[47]:
+
+df.head()
+
+
+# In[48]:
+
+print(len(df))   # no of observations or rows
+
+
+# In[49]:
+
+# First stage is exploratory data analysis
+# reasearch on data, patterns, graphs etc
+# 2 organizing and summarizing
+# 3 looking for important features and patterns
+# 4 looking for exceptions
+# 5 Interpreting these findings in the context of research question
+
+
+# In[50]:
+
+print(len(df.columns)) #no of columns
+
+
+# In[51]:
+
+# Convert convert all variabes to numeric ones
+# convert invalid values as NaN
+
+df['age'] = pd.to_numeric(df['age'], errors='coerce')
+df['sex'] = pd.to_numeric(df['sex'], errors='coerce').astype('category')
+df['chest_pain'] = pd.to_numeric(df['chest_pain'], errors='coerce').astype('category')
+df['rest_bp'] = pd.to_numeric(df['rest_bp'], errors='coerce')
+df['cholesterol'] = pd.to_numeric(df['cholesterol'], errors='coerce')
+df['fasting_bs'] = pd.to_numeric(df['fasting_bs'], errors='coerce').astype('category')
+df['rest_ecg'] = pd.to_numeric(df['rest_ecg'], errors='coerce').astype('category')
+df['max_heart_rate'] = pd.to_numeric(df['max_heart_rate'], errors='coerce')
+df['exercise_angina'] = pd.to_numeric(df['exercise_angina'], errors='coerce').astype('category')
+df['st_depression'] = pd.to_numeric(df['st_depression'], errors='coerce')
+df['slope'] = pd.to_numeric(df['slope'], errors='coerce').astype('category')
+df['flouroscopy'] = pd.to_numeric(df['flouroscopy'], errors='coerce').astype('category')
+df['defect'] = pd.to_numeric(df['defect'], errors='coerce').astype('category')
+df['diagnosis'] = pd.to_numeric(df['diagnosis'], errors='coerce').astype('category')
+
+
+# In[52]:
+
+# Let's check for missing and outlier values
+# standard options would be
+# 1 delete the observations
+# 2 imputation: marginal and conditional mean imputation(2nd one is based on regression model)
+#Overall issue is it underestimates the standard errors
+
+# Advanced options
+# 1 Multiple imputation
+# 2 Maximum likelihood
+# 3 Bayesian simulation
+# 4 Hot Deck(selects at random with replacement, a value from observations
+
+
+
+# In[53]:
+
+df['age'].isnull().value_counts()  #isnull looks for missing values
+
+
+# In[54]:
+
+age_binned = pd.qcut(df['age'], 4, labels = ["1=0%tile", "2=25%tile", "3=50%tile", "4=75%tile"]).value_counts()
+print(age_binned)
+
+
+# In[55]:
+
+df['sex'].isnull().value_counts()
+
+
+# In[56]:
+
+df['sex'].value_counts()
+
+
+# In[57]:
+
+df['sex'].value_counts(normalize=True)
+
+
+# In[58]:
+
+df['rest_bp'].isnull().value_counts()
+
+
+# In[59]:
+
+df['rest_bp'].isnull().value_counts()/len(df)
+
+
+# In[60]:
+
+df['cholesterol'].isnull().value_counts()
+
+
+# In[61]:
+
+df['cholesterol'].isnull().value_counts()/len(df)
+
+
+# In[62]:
+
+df['slope'].isnull().value_counts()
+
+
+# In[37]:
+
+df['slope'].isnull().value_counts()/len(df)
+
+
+# In[63]:
+
+df['defect'].isnull().value_counts()
+
+
+# In[64]:
+
+df['defect'].isnull().value_counts()/len(df)
+
+
+# In[65]:
+
+df_red = df[['age', 'sex', 'chest_pain', 'rest_bp', 'cholesterol', 'fasting_bs', 'rest_ecg', 'max_heart_rate',
+             'exercise_angina', 'st_depression', 'diagnosis']]
+
+
+# In[66]:
+
+df_red['rest_ecg'].fillna(df_red['rest_ecg'].mode().iloc[0], inplace=True)
+
+
+# In[67]:
+
+# tried to check if we remove missing obs variables and concatenate all non-missing ones, do we still have
+# enough no of data obs to perform our analysis?
+df_clean = df_red[df_red['rest_bp'].notnull() & df_red['cholesterol'].notnull() & df_red['fasting_bs'].notnull()
+                  & df_red['max_heart_rate'].notnull() & df_red['exercise_angina'].notnull() & 
+                    df_red['st_depression'].notnull()]
+                
+
+
+# In[68]:
+
+len(df_clean)
+
+
+# In[69]:
+
+df_clean.isnull().any()
+
+
+# In[70]:
+
+# After cleaning the data we will perform univariate analysis and descriptive analysis
+# Center-spread-modality
+# symmetry or skewness
+# mean-mode-median
+# standard deviation
+# quantitative variables: we check shape, spread, center
+# categorical variables: we check only mode and bar chart or frequency distribution
+
+# for visualizing data one variable:
+# for categorical, we use bar chart i.e sns's countplot function
+# for quantitative, we combine kernel density estimate and histogram
+
+# For visualizing two variables:
+# c-q: bivariate bar graph with sns factorplot(explanatory var on x axis, mean of response var on y axis)
+# q-q: scatterplot with sns regplot
+# c-c: you can plot them one at a time
+
+
+# In[71]:
+
+#Gender variable
+#Countplot to visualize
+#graph shows way more men in the study then women
+sns.countplot(x='sex', data=df_clean)
+plt.suptitle('Frequency of observations by gender')
+
+
+# In[73]:
+
+#Diagnosis
+#Sort tells pandas not to sort the dataset but just leave them as it is
+#normalize = True tells the relative frequencies percentage
+df_clean['diagnosis'].value_counts(sort=False, normalize=True)
+
+
+# In[74]:
+
+sns.countplot(x='diagnosis', data=df_clean)
+plt.suptitle('Frequency of distribution of diagnosis state')
+
+
+# In[75]:
+
+# Lets look at age now
+#respective value disctribution
+
+df_clean['age'].describe()
+
+
+# In[76]:
+
+# sns distplot function combines matplotlob hist() with kdeplot()
+sns.distplot(df_clean['age'])
+plt.suptitle('Distribution of age')
+
+
+# In[77]:
+
+df_clean.columns
+
+
+# In[78]:
+
+df_clean['max_heart_rate'].describe()
+
+
+# In[79]:
+
+sns.distplot(df_clean['max_heart_rate'])
+plt.suptitle('Distribution of maximal heart rate')
+
+
+# In[80]:
+
+sns.swarmplot('diagnosis', data=df_clean)
+
+
+# In[81]:
+
+sns.factorplot(x='sex', y='age', kind='bar', data=df_clean)
+plt.suptitle('Gender Vs Age')
+
+
+# In[82]:
+
+#Categorical var 'sex' and quantitative var 'rest_bp'
+#Kind=bar asks for bar graph and ci=None suppresses error bars
+#gender doesn't influence other variables here in the example
+sns.factorplot(x='sex', y='rest_bp', kind='bar', data=df_clean, ci=None)
+
+
+# In[83]:
+
+# We use regplot to plot two quantitative variables, age and cholesterol
+# explanatory var on x axis and response var on y axis
+# surprisingly as people age cholesterol levels are decreasing as per data
+sns.regplot(x='age', y='cholesterol', data=df_clean)
+
+
+# In[84]:
+
+# 2 categorical vars interacting
+df_clean.groupby('sex')['diagnosis'].value_counts()/len(df)
+
+
+# In[85]:
+
+sns.boxplot(x='cholesterol', y='sex', data=df_clean)
+plt.suptitle('Cholesterol levels by gender')
+
+
+# In[86]:
+
+# describing the dataset/ the variables of dataset by grouping
+# by age category
+df_clean.groupby('diagnosis').describe()
+
+
+# In[87]:
+
+# before manipulation, create a copy of the dataset
+df_clean_copy = df_clean.copy()
+
+
+# In[88]:
+
+# Inferential statistics
+
+# Hypothesis testing:
+# 1 define null and alternate hypothesis
+# 2 choose sample
+# 3 analyze evidence
+# 4 interpret results
+
+# typical h0: no relationship between explanatory and response variables
+# typical h1: there is statistcally significant relationship
+
+# Bivariate statistical tools:
+#Anova, chi-square, correlation coefficient
+
+# P values is also type 1 error rate: number of times we would be wrong when its true
+# p=0.03: if we reject the null hypothesis, we would be correct 87/100 times
+# type 1 Vs type 2 errors
+
+# F = variation among sample means/variation within sample groups
+# Anova F test: are the differences among sample means due to true differences among the
+# population means, mor merely due to sampling variability
+# P value of anova: probability of getting f value as large or larger if H0 is true
+# probability of finding this value if there is no difference between sample means
+# before performing the analyses, drop the null values using dropna() function
+
+# we will test null hypothesis that age and diagnosis are not related
+# Anova: explanatory categorical and response quantitative
+# Chi-square: explanatory categorical and response categorical
+# Classify/bin explanatory variable and use chi-square: explanatory quantitative and response categorical
+# pearson correlaton: explanatory quantitative and response quantitative
+
+
+# In[89]:
+
+test1 = smf.ols(formula = 'age ~ C(diagnosis)', data = df_clean_copy).fit()
+print(test1.summary())
+
+
+# In[90]:
+
+# examine the means and standard deviations
+grouped1_mean = df_clean_copy.groupby('diagnosis').mean()['age']
+print(grouped1_mean)
+
+
+# In[91]:
+
+grouped1_std = df_clean_copy.groupby('diagnosis').std()['age']
+print(grouped1_std)
+
+
+# In[93]:
+
+# given that we have an explanatory categorical variable with multiple levels, we use
+# tuckey hsd test
+# holm T
+# least significant difference
+
+tuckey1 = multi.MultiComparison(df_clean_copy['age'], df_clean_copy['diagnosis'])
+res1 = tuckey1.tukeyhsd()
+print(res1.summary())
+
+
+# In[94]:
+
+# Lets check if chest pain is indicative of diagnostic state of someone
+# Hypothesis 0: presence of chest pain and diagnosis are independent
+# Alternate hypothesis 1: presence of chest pain and diagnosis are not independent or they are dependent on each other
+
+
+# In[103]:
+
+# Feature engineering
+
+#Feature is an attribute that is useful to your problem
+# Aims to convert Data attributes to data features
+# Aims to optimize data modelling
+# Requires understanding of dataset and research problem: both domain and data driven
+# i.e for svm with linear kernel you need to manually construct non-linear interactions between
+# features and feed them as input to your SVM model. An svm with polynomial kernel will automatically capture them
+
+diagnosis_dic = {0:0, 1:1, 2:1, 3:1, 4:1}
+df_clean_copy['diagnosis_binary'] = df_clean_copy['diagnosis'].map(diagnosis_dic)
+
+
+# In[104]:
+
+df_clean_copy['diagnosis_binary'].value_counts()
+
+
+# In[105]:
+
+# Contingency table of observed counts
+# the crosstab function allows us to cross one var with another
+# While creating contingency table, we must response var first(vertical)and explanatory var second(horizontal top)
+ct1 = pd.crosstab(df_clean_copy['diagnosis_binary'], df_clean_copy['chest_pain'])
+print(ct1)
+
+
+# In[106]:
+
+# column percentages
+
+colsum = ct1.sum(axis=0)
+colpct = ct1/colsum
+print(colpct)
+
+
+# In[108]:
+
+# Chi-square test
+# Expected counts: p assuming events are independent. p(1)*p(2) | colun total* row total/table
+# chi-square summarizes the difference between our observation and what is expected
+# we rely on p values
+print('chi-square value, p-value, expected counts')
+cs1 = scipy.stats.chi2_contingency(ct1)
+print(cs1)
+
+
+# In[109]:
+
+# Explanatory var with multiple levels, we need to do pairwise comparison for every 2 groups exp vs res
+# we do Bonferroni adjustment - we adjust the p value we use by the no of pairwise comparisons between explanatory and response
+
+
+# In[110]:
+
+df_clean_copy.columns
+
+
+# In[111]:
+
+ct2 = pd.crosstab(df_clean_copy['diagnosis_binary'], df_clean_copy['sex'])
+print(ct2)
+
+
+# In[112]:
+
+colsum2 = ct2.sum(axis=0)
+colpct2 = ct2/colsum2
+print(colpct2)
+
+
+# In[113]:
+
+print('chi-square value, p-value, expected counts')
+cs2 = scipy.stats.chi2_contingency(ct2)
+print(cs2)
+
+
+# In[114]:
+
+# Moderators
+# Moderator is a third var affects the direction and/or strength between explanatory and response var
+# the question is , is our response var associated with our explanatory var
+
+
+# In[116]:
+
+# Lets see if sex is a moderator in the statistically significant relation between chest pain and diagnosis
+df_clean_copy_men = df_clean_copy[df_clean_copy['sex'] == 0]
+len(df_clean_copy_men)
+
+
+# In[117]:
+
+df_clean_copy_women = df_clean_copy[df_clean_copy['sex'] == 1]
+len(df_clean_copy_women)
+
+
+# In[118]:
+
+ct3 = pd.crosstab(df_clean_copy_men['diagnosis_binary'], df_clean_copy_men['chest_pain'])
+print(ct3)
+
+
+# In[120]:
+
+colsum = ct3.sum(axis=0)
+colpct = ct3/colsum
+print(colpct)
+
+
+# In[121]:
+
+print('chi-square value, p-value, expected counts')
+cs3 = scipy.stats.chi2_contingency(ct3)
+print(cs3)
+
+
+# In[122]:
+
+ct4 = pd.crosstab(df_clean_copy_women['diagnosis_binary'], df_clean_copy_women['chest_pain'])
+print(ct4)
+
+
+# In[123]:
+
+colsum = ct4.sum(axis=0)
+colpct = ct4/colsum
+print(colpct)
+
+
+# In[124]:
+
+print('chi-square value, p-value, expected counts')
+cs4 = scipy.stats.chi2_contingency(ct4)
+print(cs4)
+
+
+# In[125]:
+
+df_clean_copy_women.groupby('chest_pain')['diagnosis'].value_counts()
+
+
+# In[126]:
+
+#The relationship between chest pain and diagnosis holds for both men and women
+
+
+# In[127]:
+
+# when 2 vars are correlated it is possible that:
+# x causes y or y causes x
+# z causes both x and y
+# x and y are correlated by chance - a spurious one
+
+
+# In[128]:
+
+df_clean_copy.columns
+
+
+# In[130]:
+
+scat1 = sns.regplot(x='age', y='cholesterol', fit_reg=True, data=df_clean_copy)
+plt.xlabel('Age')
+plt.ylabel('Cholesterol')
+plt.suptitle('Relationship between age and cholesterol')
+scat1
+
+
+# In[131]:
+
+# the r coefficient is measure of association, of how points are closely clustered, coeff between -1 and +1
+# measures linear association
+# it can mislead in presence of outliers or non-linear association
+
+print('association between age and cholesterol')
+print(scipy.stats.pearsonr(df_clean_copy['age'], df_clean_copy['cholesterol']))
+
+
+# In[132]:
+
+# Linear regression
+# multivariate linear regression for quantitative response variable
+# Logistic regression for binary categorical response variable
+
+# Assumptions:
+
+# Normality: residuals from our linear regression models are normally distributed
+
+# Linearity: association between explanatory and response variables are linear
+
+# homoscedasticity(or assumption of constant variance): if the residuals are spread around the regression line
+# in a similar manner as you move along x axis (values of explanatory variables)
+
+# Independence: observations are nor correlated wth each other
+
+# Multicollinearity: explanatory variables are highly correlated with each other, 
+
+# Outliers: can affect our regression line and meaning
+
+
+
+# In[133]:
+
+# Here we will use multiple regression model, investigating the relation between explanatory and response var diagnosis
+
+# categorical variables: sex, chest_pain, fasting_bs, rest_ecg, exercise_angina
+# quantitaive variables: age, rest_bp, cholesterol, max_heart_rate, st_depression
+
+
+# In[136]:
+
+df_clean_copy['chest_pain'].value_counts()
+
+
+# In[138]:
+
+# we should recenter values from zero for categorical variables for interpretation, we hold them constant at 0
+recode_chest_pain = {1:0, 2:1, 3:2, 4:3}
+df_clean_copy['chest_pain_p'] = df_clean_copy['chest_pain'].map(recode_chest_pain)
+
+
+# In[139]:
+
+df['fasting_bs'].value_counts()
+
+
+# In[140]:
+
+df['rest_ecg'].value_counts()
+
+
+# In[141]:
+
+df['exercise_angina'].value_counts()
+
+
+# In[ ]:
+
+# we recenter the quantitative values by subtracting values from mean, so al will be mean of zero
+
+
+# In[142]:
+
+df_clean_copy['age_c'] = df_clean_copy['age'] - df_clean_copy['age'].mean()
+
+
+# In[144]:
+
+df_clean_copy['rest_bp_c'] = df_clean_copy['rest_bp'] - df_clean_copy['rest_bp'].mean()
+
+
+# In[145]:
+
+df_clean_copy['cholesterol_c'] = df_clean_copy['cholesterol'] - df_clean_copy['cholesterol'].mean()
+
+
+# In[146]:
+
+df_clean_copy['max_heart_rate_c'] = df_clean_copy['max_heart_rate'] - df_clean_copy['max_heart_rate'].mean()
+
+
+# In[147]:
+
+df_clean_copy['st_depression_c'] = df_clean_copy['st_depression'] - df_clean_copy['st_depression'].mean()
+
+
+# In[148]:
+
+df_clean_copy.columns
+
+
+# In[149]:
+
+df_clean_copy_c = df_clean_copy[['age_c', 'sex', 'chest_pain_p', 'rest_bp_c', 'cholesterol_c', 'fasting_bs',
+                                'rest_ecg', 'max_heart_rate_c', 'exercise_angina', 
+                                'st_depression_c', 'diagnosis_binary']]
+
+
+# In[150]:
+
+df_clean_copy_c.columns
+
+
+# In[168]:
+
+# checks if sex is good predictor of age, which is not in this case we reject this relationship
+model1 = smf.ols(formula = 'age_c ~ sex', data = df_clean_copy_c).fit()
+print(model1.summary())
+
+
+# In[169]:
+
+model2 = smf.ols(formula = 'age_c ~ sex + cholesterol_c', data = df_clean_copy_c).fit()
+print(model2.summary())
+
+
+# In[171]:
+
+model3 = smf.ols(formula = 'age_c ~ sex + C(chest_pain_p) + (rest_bp_c) + cholesterol_c                  + fasting_bs + C(rest_ecg) + max_heart_rate_c + exercise_angina +                  st_depression_c + diagnosis_binary', data = df_clean_copy_c).fit()
+print(model3.summary())
+
+
+# In[172]:
+
+# Lets run diagnostics
+# Q-Q plot for normality
+
+fig1 = sm.qqplot(model3.resid, line='r')
+
+# red line reporesents residuals we would expect if model residula are normally distributed
+# below the residuals are closer to red line expect at lower and higher end
+
+
+# In[173]:
+
+# plot of residuls
+
+stdres = pd.DataFrame(model3.resid_pearson)
+plt.plot(stdres, 'o', ls='None')
+l = plt.axhline(y=0, color='r')
+plt.ylabel('standarized residual')
+plt.xlabel('Observation number')
+
+# resid_pearson normalizes our residuals
+# ls=none means point will not be connected
+# we expect most residuals to fall within 2nd std dev of mean
+# Here we see few residuals between 2 & 3 and above 3 std dev(y axis) which means our model is poor in explaining the variability
+# in our response variable
+# this explains why the r-square is 0.3 
+
+
+# In[174]:
+
+# Leverage plot
+
+fig4 = sm.graphics.influence_plot(model3, size=8)
+print(fig4)
+
+# Here we see a point 33 which seems an outlier and needs to be investigated thoroughly as that obervation number
+# 33 is 2 points Std dev away from mean.
+# leverage is how important that one point is in our model and how it modifies the models. point 33 here influnces
+# more to the model hence needs investigation
+
+
+# In[175]:
+
+# Lets focus on the actual response variable in the study
+# since its binary variable, we need to use logistic regression
+
+
+# In[188]:
+
+# missing function chisqprob back into the scipy.stats namespace as shown below,
+
+from scipy import stats
+stats.chisqprob = lambda chisq, df: stats.chi2.sf(chisq, df)
+
+
+# In[189]:
+
+lreg1 = smf.logit(formula = 'diagnosis_binary ~ age_c + sex + C(chest_pain_p) + rest_bp_c +                              cholesterol_c + fasting_bs + C(rest_ecg) + max_heart_rate_c +                              exercise_angina + st_depression_c', data = df_clean_copy_c).fit()
+print(lreg1.summary())
+
+
+# In[190]:
+
+# It takes more sense to calculate odds ration in logistic regression
+# if OR=1, model is not staistically significant
+# if OR<!, the response var becomes less likely as explanatory one increases
+# if OR>1, the response var becomes more likely as explanatory one increases
+print('Odds ratio')
+print(np.exp(lreg1.params))
+# interpretation of OR: sex exp var increases 3.7 times for increase in probability of response var towards 1
+
+
+# In[191]:
+
+# Plot of residuals
+stdres = pd.DataFrame(lreg1.resid_pearson)
+plt.plot(stdres, 'o', ls='None')
+l = plt.axhline(y=0, color='r')
+plt.ylabel('standarized residual')
+plt.xlabel('Observation number')
+
+
+# In[ ]:
+
+
+
